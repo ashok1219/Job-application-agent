@@ -232,7 +232,8 @@ def send_email(subject: str, html_body: str):
     user = os.getenv("SMTP_USER")
     password = os.getenv("SMTP_PASSWORD")
     recipient = os.getenv("EMAIL_TO")
-    port = int(os.getenv("SMTP_PORT", "587"))
+    port = int(os.getenv("SMTP_PORT") or "587")
+    #port = int(os.getenv("SMTP_PORT", "587"))
     if not all([host, user, password, recipient]):
         print("Email not configured; report saved locally.")
         return False
