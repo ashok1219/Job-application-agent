@@ -228,7 +228,8 @@ def render_report(rows, errors=None):
     return REPORT_PATH
 
 def send_email(subject: str, html_body: str):
-    host = os.getenv("SMTP_HOST")
+    #host = os.getenv("SMTP_HOST")
+    host = "smtp.gmail.com"
     user = os.getenv("SMTP_USER")
     password = os.getenv("SMTP_PASSWORD")
     recipient = os.getenv("EMAIL_TO")
