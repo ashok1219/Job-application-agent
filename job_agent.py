@@ -245,11 +245,21 @@ def send_email(subject: str, html_body: str):
     msg["To"] = recipient
     msg.set_content("Your daily job shortlist is attached as an HTML report. Open daily_jobs.html.")
     msg.add_alternative(html_body, subtype="html")
+    #with smtplib.SMTP(host, port, timeout=30) as server:
+    #   server.starttls()
+    #    server.login(user, password)
+    #    server.send_message(msg)
+    #return True
     with smtplib.SMTP(host, port, timeout=30) as server:
-        server.starttls()
-        server.login(user, password)
-        server.send_message(msg)
-    return True
+    server.set_debuglevel(1)
+
+    server.ehlo()
+    server.starttls()
+    server.ehlo()
+
+    print("USER:", user)
+
+    server.login(user, password)
 
 def read_report():
     return REPORT_PATH.read_text(encoding="utf-8") if REPORT_PATH.exists() else ""
