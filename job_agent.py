@@ -251,15 +251,20 @@ def send_email(subject: str, html_body: str):
     #    server.send_message(msg)
     #return True
     with smtplib.SMTP(host, port, timeout=30) as server:
-    server.set_debuglevel(1)
+        server.set_debuglevel(1)
 
-    server.ehlo()
-    server.starttls()
-    server.ehlo()
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
 
-    print("USER:", user)
+        print("USER:", user)
 
-    server.login(user, password)
+        server.login(user, password)
+
+        print("Sending email...")
+        server.send_message(msg)
+
+    print("Email sent successfully")
 
 def read_report():
     return REPORT_PATH.read_text(encoding="utf-8") if REPORT_PATH.exists() else ""
