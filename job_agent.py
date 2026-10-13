@@ -258,13 +258,14 @@ def send_email(subject: str, html_body: str):
         server.ehlo()
 
         print("USER:", user)
+        print("USER length:", len(user or ""))
+        print("PASSWORD length:", len(password or ""))
 
         server.login(user, password)
 
         print("Sending email...")
         server.send_message(msg)
 
-    print("Email sent successfully")
 
 def read_report():
     return REPORT_PATH.read_text(encoding="utf-8") if REPORT_PATH.exists() else ""
