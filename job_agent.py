@@ -237,7 +237,7 @@ def send_email(subject: str, html_body: str):
         print("Email not configured; report saved locally.")
         return False
     msg = email.message.EmailMessage()
-    msg["Subject"] = subject
+    msg["SUBJECT"] = subject
     msg["From"] = os.getenv("EMAIL_FROM", user)
     msg["To"] = recipient
     msg.set_content("Your daily job shortlist is attached as an HTML report. Open daily_jobs.html.")

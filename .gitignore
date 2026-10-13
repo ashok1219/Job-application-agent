@@ -1,0 +1,4 @@
+.env
+jobs.db
+profile.json
+__pycache__/
