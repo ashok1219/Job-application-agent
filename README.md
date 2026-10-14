@@ -1,6 +1,6 @@
 # Personal Job Application Agent — Approval-first MVP
 
-A Python starter project for finding recent QA/software-testing vacancies, scoring them against a resume and profile, avoiding duplicate links, creating a daily shortlist, and optionally emailing it. You approve each job and review its form; the agent does **not** submit applications.
+A Python starter project for finding recent vacancies, matching listings against a resume and profile, avoiding duplicate links, creating a shortlist, and optionally emailing it. You approve each job and review its form; the agent does **not** submit applications.
 
 ## 1. Requirements
 - Python 3.10+
@@ -55,7 +55,7 @@ To apply your custom profile in that workflow, add `JOB_PROFILE_JSON` as a GitHu
 For Gmail, enable 2-Step Verification and create an App Password. Put it in `.env` as `SMTP_PASSWORD`. Do not use your normal Gmail password. Run the script again to test.
 
 ## 7. What this MVP searches
-It reads Google News RSS search results for the configured profile roles, skills, and location (or default QA/testing queries when no roles or skills are configured), then filters by published date when the feed supplies one. RSS results may be news stories, reposts, stale pages, or links to third-party boards; therefore:
+It reads Google News RSS search results for configured roles, skills, and location (or default QA/testing queries when no profile is configured), then filters by published date when the feed supplies one. RSS results may be news stories, reposts, stale pages, or links to third-party boards; therefore:
 - Always open the original listing and confirm it is still open.
 - Prefer the employer's official career page before applying.
 - Some results may omit publication dates; those are marked as unknown.
@@ -64,33 +64,25 @@ It reads Google News RSS search results for the configured profile roles, skills
 - Do not bypass CAPTCHAs, OTPs, login restrictions, rate limits, or site controls.
 - The dashboard can prepare a form by filling common fields after you approve a job. It never submits an application.
 
-## 8. Improve next
-1. Add employer-provided career APIs/RSS feeds where permitted.
-2. Add a resume parser for PDF/DOCX and explicit hard filters for years, degree, city and salary.
-3. Add a stronger semantic matcher after validating the basic pipeline.
+## 8. Resume-based web search
+The dashboard accepts PDF, DOCX, and UTF-8 TXT resumes up to 10 MB. It extracts selectable text, detects skills and possible roles from built-in keyword lists, and lets you edit the target roles, skills, preferred locations, and experience used to search and score listings. The uploaded file and extracted text are processed in memory and are not saved by the app; only your chosen role, skill, and location search terms are sent to Google News RSS. Scanned/image-only PDFs are not supported. Match scores use job titles and RSS summaries, not necessarily the full employer description.
 
-
-## 9. Approval dashboard (Windows)
-Install the expanded dependencies:
-```powershell
-pip install -r requirements.txt
-python -m playwright install chromium
-```
-Create your private profile:
+Create a private profile if you want defaults for roles, skills, location, and experience:
 ```powershell
 copy profile.example.json profile.json
 ```
-Edit `profile.json` with accurate personal details, plus the `target_roles`, `skills`, `preferred_locations`, and `experience_years` you want matched. These fields drive job-search queries and relevance scoring. Do not share the file or commit it to Git. Keep `phone`, email, LinkedIn URL and notice period blank until you fill them in yourself.
+Do not share `profile.json` or commit it to Git. Personal details are optional for searching and are used only by the separate form-filling helper.
 
-Run the job finder once, then start the dashboard:
+Start the dashboard:
 ```powershell
-python job_agent.py
 streamlit run app.py
 ```
 Streamlit prints a local URL, usually `http://localhost:8501`. Open it in your browser.
-Use **Search for latest jobs now** in the dashboard to refresh listings at any time. The dashboard defaults to showing matches scored 50/100 or higher; adjust its minimum-score filter to see more.
+Upload a resume, review/edit the suggested matching fields, and choose **Find highly matched jobs**. The dashboard defaults to showing matches scored 50/100 or higher; adjust its minimum-score filter to see more. Google News RSS and keyword scoring provide estimates, not verified vacancies or semantic understanding. Always verify the employer listing, current availability, and requirements.
 
-## 10. Assisted form filling
+The regular **Search for latest jobs now** button still runs using the saved local profile and `resume.txt`. In a scheduled GitHub Actions run, add `JOB_PROFILE_JSON` as a secret to use configured search terms; uploaded resumes are not used by that scheduled workflow.
+
+## 9. Assisted form filling
 1. Review the job listing on the employer's site.
 2. In the dashboard, review the match and approve that job for assisted form preparation.
 3. Click **Open assisted application browser**.
@@ -100,7 +92,7 @@ Use **Search for latest jobs now** in the dashboard to refresh listings at any t
 
 This is intentional: job portals use different field labels and may have screening questions, declarations, legal attestations, or site-specific terms. Never automate answers to eligibility, visa, disability, criminal-history, or other sensitive/legal questions. Answer these yourself. Never bypass CAPTCHA, OTP, login, rate limits, or bot controls. Use this helper only where browser assistance is permitted by the site.
 
-## 11. Gmail notifications
+## 10. Gmail notifications
 The original daily finder sends a report through Gmail SMTP if `.env` is configured. For Gmail, turn on 2-Step Verification and generate an App Password. Do not put your normal Gmail password into `.env`. The dashboard is local; the daily job finder and its scheduler must run for new email notifications to be sent.
 
 ## Public hosting

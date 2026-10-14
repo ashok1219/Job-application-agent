@@ -42,6 +42,15 @@ TARGET_TITLES = [
     "manual tester", "automation tester", "automation test engineer",
     "sdet", "junior sdet", "quality analyst",
 ]
+RESUME_ROLE_TERMS = [
+    *TARGET_TITLES,
+    "software engineer", "frontend developer", "front-end developer",
+    "backend developer", "back-end developer", "full stack developer",
+    "web developer", "mobile developer", "data analyst", "data scientist",
+    "data engineer", "machine learning engineer", "devops engineer",
+    "cloud engineer", "business analyst", "product manager", "project manager",
+    "security engineer", "network engineer", "systems administrator",
+]
 LOCATIONS = ["India", "Hyderabad", "Chennai", "Bengaluru", "Bangalore", "Pune",
              "Gurugram", "Gurgaon", "Noida", "Mumbai", "Remote"]
 SEARCH_QUERIES = [
@@ -58,6 +67,18 @@ DEFAULT_SKILLS = [
     "selenium", "java", "testng", "postman", "api testing", "rest api",
     "sql", "jira", "jenkins", "playwright", "automation framework",
 ]
+RESUME_SKILL_TERMS = sorted(set(DEFAULT_SKILLS + [
+    "python", "javascript", "typescript", "c++", "c#", "go", "rust", "ruby",
+    "php", "kotlin", "swift", "react", "angular", "vue", "node.js", "django",
+    "flask", "fastapi", "spring", "dotnet", ".net", "aws", "azure", "gcp",
+    "docker", "kubernetes", "terraform", "linux", "git", "github actions",
+    "machine learning", "deep learning", "data analysis", "pandas", "numpy",
+    "tableau", "power bi", "excel", "spark", "hadoop", "postgresql", "mysql",
+    "mongodb", "redis", "graphql", "microservices", "agile", "scrum",
+    "cypress", "appium", "cucumber", "robot framework", "load testing",
+    "performance testing", "security testing", "figma", "html", "css",
+    "project management", "product management", "salesforce",
+]))
 
 def load_profile() -> dict:
     if not PROFILE_PATH.exists():
@@ -132,6 +153,16 @@ def search_queries(profile: dict | None = None) -> list[str]:
     else:
         custom = [f'"{skill}" {location} jobs' for skill in skills[:5]]
     return list(dict.fromkeys(custom))
+
+def infer_resume_skills(resume: str) -> list[str]:
+    text = resume.lower()
+    return [skill for skill in RESUME_SKILL_TERMS if re.search(
+        rf"(?<![a-z0-9_]){re.escape(skill)}(?![a-z0-9_])", text
+    )]
+
+def infer_resume_roles(resume: str) -> list[str]:
+    text = resume.lower()
+    return [role for role in RESUME_ROLE_TERMS if role in text]
 
 def db():
     conn = sqlite3.connect(DB_PATH)
@@ -221,10 +252,10 @@ def score_job(title: str, summary: str, resume: str, profile: dict | None = None
         matched.append("seniority warning")
     return max(0, min(100, score)), sorted(set(matched))
 
-def fetch_jobs(days: int = 7):
+def fetch_jobs(days: int = 7, resume: str | None = None, profile: dict | None = None):
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    resume = resume_text()
-    profile = load_profile()
+    resume = resume_text() if resume is None else resume.lower()
+    profile = load_profile() if profile is None else profile
     conn = db()
     now = datetime.now(timezone.utc).isoformat()
     found = 0
@@ -254,12 +285,19 @@ def fetch_jobs(days: int = 7):
                     ON CONFLICT(url) DO UPDATE SET
                       title=excluded.title, source=excluded.source,
                       published=CASE WHEN excluded.published='' THEN jobs.published ELSE excluded.published END,
-                      summary=excluded.summary, score=MAX(jobs.score, excluded.score),
+                      summary=excluded.summary, score=excluded.score,
                       matched_terms=excluded.matched_terms, last_seen=excluded.last_seen
                 """, (link, title, source, pub, summary, score, ", ".join(matched), "NEW", now, now))
                 found += 1
         except Exception as exc:
             errors.append(f"{query}: {exc}")
+    rows = conn.execute("SELECT url, title, summary FROM jobs").fetchall()
+    for row in rows:
+        score, matched = score_job(row["title"], row["summary"] or "", resume, profile)
+        conn.execute(
+            "UPDATE jobs SET score=?, matched_terms=? WHERE url=?",
+            (score, ", ".join(matched), row["url"]),
+        )
     conn.commit()
     conn.close()
     return found, errors
