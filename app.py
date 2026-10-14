@@ -39,11 +39,36 @@ if required_password:
         st.stop()
 
 st.title("🧭 Personal Job Application Agent")
-st.caption("Review-first workflow · No application is submitted automatically")
+st.caption("Find recent profile-matched jobs, approve each application, and review before submitting.")
+
+if st.button("🔎 Search for latest jobs now", type="primary"):
+    try:
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "job_agent.py"), "--no-email"],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        st.error("Job search timed out after 3 minutes. Check your connection and try again.")
+    except OSError as exc:
+        st.error(f"Could not start the job search: {exc}")
+    else:
+        if result.returncode:
+            st.error("Job search failed.")
+            if result.stderr:
+                st.code(result.stderr)
+            if result.stdout:
+                st.code(result.stdout)
+        else:
+            st.success(result.stdout.strip() or "Job search completed.")
+            if result.stderr:
+                st.warning(result.stderr)
 
 if not DB_PATH.exists():
-    st.warning("No jobs database found yet. Run `python job_agent.py` first to discover jobs.")
-    st.code("python job_agent.py")
+    st.info("Run a job search above to discover recent openings.")
     st.stop()
 
 def get_conn():
@@ -67,7 +92,7 @@ col1, col2, col3 = st.columns([1.2, 1.2, 1])
 with col1:
     status_filter = st.selectbox("Status", statuses)
 with col2:
-    min_score = st.slider("Minimum match score", 0, 100, 25, 5)
+    min_score = st.slider("Minimum match score", 0, 100, 50, 5)
 with col3:
     search = st.text_input("Search company / title", placeholder="e.g. QA Engineer")
 
@@ -134,6 +159,7 @@ with right:
     st.divider()
     st.subheader("Browser-assisted form filling")
     st.write("For an approved job, open the original page in a controlled Playwright browser. The helper can fill obvious fields from your profile, then pauses for you to review and submit manually.")
+    st.caption("Approval authorizes form preparation only. Verify every answer and click Submit yourself; the agent never submits applications.")
     can_launch = job["status"] == "APPROVED"
     if not can_launch:
         st.info("Approve this job first to enable assisted form filling.")
@@ -148,9 +174,10 @@ st.divider()
 st.subheader("Daily workflow")
 st.markdown("""
 1. Run the daily finder (`python job_agent.py`) to update the database.
-2. Review the score, matching terms and original employer listing.
-3. Shortlist, reject or approve each suitable job.
-4. For approved jobs, use assisted form filling and verify every field.
-5. **You must review the completed form and click Submit yourself.**
-6. Mark the application as applied and record any confirmation details in notes.
+2. Or use **Search for latest jobs now** above. Jobs are ranked using profile roles, skills, location, experience and resume overlap.
+3. Review the score, matching terms and original employer listing.
+4. Shortlist, reject or approve each suitable job.
+5. For approved jobs, use assisted form filling and verify every field.
+6. **You must review the completed form and click Submit yourself.**
+7. Mark the application as applied and record any confirmation details in notes.
 """)

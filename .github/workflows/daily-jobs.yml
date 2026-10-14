@@ -36,7 +36,11 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          JOB_PROFILE_JSON: ${{ secrets.JOB_PROFILE_JSON }}
         run: |
+          if [ -n "$JOB_PROFILE_JSON" ]; then
+            printf '%s' "$JOB_PROFILE_JSON" > profile.json
+          fi
           python job_agent.py
 
       - name: Upload HTML report

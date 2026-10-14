@@ -10,5 +10,30 @@
   "location": "Hyderabad, India",
   "experience": "1.7 years",
   "expected_ctc": "750000",
-  "notice_period": ""
+  "notice_period": "",
+  "target_roles": [
+    "QA Engineer",
+    "Automation Test Engineer",
+    "Software Test Engineer",
+    "Manual Tester",
+    "SDET"
+  ],
+  "skills": [
+    "Selenium",
+    "Java",
+    "TestNG",
+    "Postman",
+    "API testing",
+    "REST API",
+    "SQL",
+    "Jira",
+    "Jenkins",
+    "Playwright"
+  ],
+  "preferred_locations": [
+    "Hyderabad",
+    "India",
+    "Remote"
+  ],
+  "experience_years": 1.7
 }

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import email.message
 import html
+import json
 import os
 import re
 import smtplib
@@ -30,19 +31,11 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "jobs.db"
 RESUME_PATH = ROOT / "resume.txt"
+PROFILE_PATH = ROOT / "profile.json"
 REPORT_PATH = ROOT / "daily_jobs.html"
 
 load_dotenv(ROOT / ".env")
 
-PROFILE_TERMS = {
-    "qa": ["qa engineer", "quality assurance", "quality engineer", "software tester",
-           "software test engineer", "test engineer", "quality analyst"],
-    "automation": ["automation tester", "automation test engineer", "test automation",
-                   "selenium", "sdet", "playwright"],
-    "manual": ["manual tester", "manual testing", "functional testing", "regression testing"],
-    "skills": ["selenium", "java", "testng", "postman", "api testing", "rest api",
-               "sql", "jira", "jenkins", "playwright", "automation framework"],
-}
 TARGET_TITLES = [
     "qa engineer", "quality assurance engineer", "quality engineer",
     "software tester", "software test engineer", "test engineer",
@@ -61,6 +54,84 @@ SEARCH_QUERIES = [
     'site:careers.* Selenium QA India jobs',
     'site:jobs.* "QA Engineer" India Selenium',
 ]
+DEFAULT_SKILLS = [
+    "selenium", "java", "testng", "postman", "api testing", "rest api",
+    "sql", "jira", "jenkins", "playwright", "automation framework",
+]
+
+def load_profile() -> dict:
+    if not PROFILE_PATH.exists():
+        return {}
+    profile = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    if not isinstance(profile, dict):
+        raise ValueError("profile.json must contain a JSON object.")
+    return profile
+
+def configured_terms(profile: dict, key: str, fallback: list[str]) -> list[str]:
+    value = profile.get(key, fallback)
+    if isinstance(value, str):
+        values = value.split(",")
+    elif isinstance(value, list) and all(isinstance(item, str) for item in value):
+        values = value
+    else:
+        raise ValueError(f"profile.json field '{key}' must be a string or a list of strings.")
+    return [item.strip().lower() for item in values if item.strip()]
+
+def profile_locations(profile: dict) -> list[str]:
+    if "preferred_locations" in profile:
+        locations = profile["preferred_locations"]
+    elif "location" in profile:
+        locations = profile["location"]
+    else:
+        locations = LOCATIONS
+    if isinstance(locations, str):
+        locations = locations.split(",")
+    elif not isinstance(locations, list) or not all(isinstance(location, str) for location in locations):
+        raise ValueError("profile.json location fields must be a string or a list of strings.")
+    return [location.strip().lower() for location in locations if location.strip()]
+
+def profile_experience_years(profile: dict):
+    value = profile.get("experience_years", profile.get("experience"))
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("profile.json experience must be a number or a string containing years.")
+    match = re.search(r"\d+(?:\.\d+)?", value)
+    if not match:
+        raise ValueError("profile.json experience must include a numeric number of years.")
+    return float(match.group())
+
+def job_minimum_experience(text: str):
+    range_match = re.search(
+        r"\b(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*\d+(?:\.\d+)?\s*\+?\s*years?\b",
+        text,
+    )
+    if range_match:
+        return float(range_match.group(1))
+    minimum_match = re.search(r"\b(\d+(?:\.\d+)?)\s*\+\s*years?\b", text)
+    if minimum_match:
+        return float(minimum_match.group(1))
+    return None
+
+def search_queries(profile: dict | None = None) -> list[str]:
+    profile = profile or {}
+    if not profile.get("target_roles") and not profile.get("skills"):
+        return SEARCH_QUERIES
+    roles = configured_terms(profile, "target_roles", TARGET_TITLES)
+    skills = configured_terms(profile, "skills", DEFAULT_SKILLS)
+    locations = profile_locations(profile)
+    location = locations[0] if locations else "India"
+    keywords = " ".join(skills[:2])
+    if roles:
+        custom = [
+            " ".join(f'"{role}" {keywords} {location} jobs'.split())
+            for role in roles[:5]
+        ]
+    else:
+        custom = [f'"{skill}" {location} jobs' for skill in skills[:5]]
+    return list(dict.fromkeys(custom))
 
 def db():
     conn = sqlite3.connect(DB_PATH)
@@ -108,31 +179,44 @@ def resume_text() -> str:
         return RESUME_PATH.read_text(encoding="utf-8", errors="ignore").lower()
     return ""
 
-def score_job(title: str, summary: str, resume: str):
+def score_job(title: str, summary: str, resume: str, profile: dict | None = None):
+    profile = profile or {}
     text = f"{title} {summary}".lower()
     score = 0
     matched = []
     title_l = title.lower()
-    if any(term in title_l for term in TARGET_TITLES):
+    roles = configured_terms(profile, "target_roles", TARGET_TITLES)
+    skills = configured_terms(profile, "skills", DEFAULT_SKILLS)
+    locations = profile_locations(profile)
+    if any(term in title_l for term in roles):
         score += 35
         matched.append("target title")
-    for group, terms in PROFILE_TERMS.items():
-        group_hits = [term for term in terms if term in text]
-        if group_hits:
-            matched.extend(group_hits[:])
-            score += min(25 if group == "skills" else 15, len(group_hits) * (4 if group == "skills" else 6))
-    if any(loc.lower() in text for loc in LOCATIONS):
+    skill_hits = [term for term in skills if term in text]
+    if skill_hits:
+        matched.extend(skill_hits)
+        score += min(25, len(skill_hits) * 5)
+    if any(loc in text for loc in locations):
         score += 10
-        matched.append("India/location")
-    # Only reward resume overlap, never penalize for missing resume file.
-    resume_hits = [term for term in PROFILE_TERMS["skills"] if term in resume and term in text]
+        matched.append("preferred location")
+    resume_hits = [term for term in skills if term in resume and term in text]
     if resume_hits:
         score += min(15, len(resume_hits) * 3)
         matched.extend([f"resume:{x}" for x in resume_hits])
-    if re.search(r"\b(0\s*[-–to]+\s*3|1\s*[-–to]+\s*2|1\+|0\+|1\s*year|two years|2\s*years?)\b", text):
+    experience = profile_experience_years(profile)
+    minimum_experience = job_minimum_experience(text)
+    if minimum_experience is not None and experience is not None and minimum_experience > experience:
+        score -= 20
+        matched.append("experience above profile")
+    elif (experience is None or experience <= 3) and re.search(
+        r"\b(0\s*[-–to]+\s*3|1\s*[-–to]+\s*2|1\+|0\+|1\s*year|two years|2\s*years?)\b",
+        text,
+    ):
         score += 8
         matched.append("potentially junior-friendly")
-    if re.search(r"\b(5\+ years|6\+ years|7\+ years|8\+ years|10\+ years|lead|principal)\b", text):
+    if minimum_experience is None and re.search(
+        r"\b(5\+ years|6\+ years|7\+ years|8\+ years|10\+ years|lead|principal)\b",
+        text,
+    ) and experience is not None and experience < 5:
         score -= 20
         matched.append("seniority warning")
     return max(0, min(100, score)), sorted(set(matched))
@@ -140,12 +224,13 @@ def score_job(title: str, summary: str, resume: str):
 def fetch_jobs(days: int = 7):
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     resume = resume_text()
+    profile = load_profile()
     conn = db()
     now = datetime.now(timezone.utc).isoformat()
     found = 0
     errors = []
     headers = {"User-Agent": "PersonalJobAgent/1.0 (job seeker; RSS reader)"}
-    for query in SEARCH_QUERIES:
+    for query in search_queries(profile):
         url = build_feed_url(query)
         try:
             response = requests.get(url, headers=headers, timeout=20)
@@ -161,7 +246,7 @@ def fetch_jobs(days: int = 7):
                 source = clean_text(entry.get("source", {}).get("title", "")) if isinstance(entry.get("source"), dict) else ""
                 if not title or not link:
                     continue
-                score, matched = score_job(title, summary, resume)
+                score, matched = score_job(title, summary, resume, profile)
                 pub = published.isoformat() if published else ""
                 conn.execute("""
                     INSERT INTO jobs(url,title,source,published,summary,score,matched_terms,status,first_seen,last_seen)
